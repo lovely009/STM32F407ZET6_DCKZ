@@ -1,0 +1,39 @@
+#include "system.h"
+
+//航模SBUS通信控制标志位。
+u8 SBUS_ON_Flag=0;
+
+void systemInit(void)
+{       
+	//中断优先级分组设置
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_4);
+	
+	//延时函数初始化
+	delay_init(168);			                                            
+	
+	//串口1初始化，通信波特率115200，用于与
+	usart1_init(115200);	  
+	
+	//串口1初始化，通信波特率115200，用于与
+	//usart2_init(115200);	  
+	
+	//串口3(RS485)初始化，通信波特率115200，用于与PLC通信
+	usart3_init(115200);
+	
+	//串口4初始化，通信波特率15200，用于PC端和ROS通信
+	uart4_init(115200);  
+	
+	//串口5初始化，通信波特率100000，用于航模SBUS接口
+	uart5_init(100000);
+	
+  //CAN通信接口初始化,用于与驱动器通信
+	CAN1_Mode_Init(1,5,15,8,0);  //250kbps 
+	
+  //初始化定时器，用于步进电机脉冲，频率10KHZ
+  Tim_PUL_Init(0,0);//通用定时器TIM3的频率为84M，频率=84M/((1049+1)*(99+1))=800
+	
+	//通用io口初始化，用于各种控制
+	Gpio_Init();
+	
+}
+

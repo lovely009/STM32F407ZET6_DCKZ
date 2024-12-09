@@ -1,0 +1,127 @@
+#include "control.h"
+
+u16 *sbus_Value[25];
+
+/**************************************************************************
+函数功能：FreeRTOS任务，核心控制任务
+入口参数：无
+返回  值：无
+**************************************************************************/
+void Control_task(void *pvParameters)
+{ 
+	  u32 lastWakeTime = getSysTickCnt();
+    while(1)
+    {	
+			//此任务以100Hz的频率运行（10ms控制一次）
+			vTaskDelayUntil(&lastWakeTime, F2T(RATE_50_HZ));
+			
+			 if(SBUS_ON_Flag)Remote_control();
+			
+			 else            Ros_control();
+		}				
+}
+
+void Remote_control(void)
+{
+	signed char LX1,LY1,RX2,RY2,Move_X,Move_Z;
+	
+	LX1 = sbus_to(sbus[ 0]);
+  LY1 = sbus_to(sbus[ 1]);
+  RX2 = sbus_to(sbus[ 2]);
+  RY2 = sbus_to(sbus[ 3]);
+	
+	//运动学逆解
+	Move_X= RY2; 
+  Move_Z=-RX2;
+	Move_X=Move_Z+LY1;
+	Move_Z=Move_Z/2;
+	if(Move_X<0) Move_Z = -Move_Z;
+	
+	Send_Data.Send_Str.A_speed=Move_X-Move_Z;
+	Send_Data.Send_Str.B_speed=Move_X+Move_Z;
+	
+	
+//前臂步进电机控制
+if (Variable_detection(sbus_Value[4],sbus[4]))
+{
+	if(sbus[4]>1500)
+	{
+		GPIO_ResetBits(GPIOF,GPIO_Pin_8);
+		Tim_PUL_Init(1049,9);
+	}
+	else if(sbus[4]<1500&&sbus[4]>500)
+	{
+		Tim_PUL_Init(0,0);
+	}
+	else if(sbus[4]<500)
+	{
+		GPIO_SetBits(GPIOF,GPIO_Pin_8);
+		Tim_PUL_Init(1049,9);
+	}
+}	
+//后臂电推杆控制
+if (Variable_detection(sbus_Value[5],sbus[5]))
+{
+		if(sbus[5]>1500)
+	{
+		GPIO_SetBits(GPIOA,GPIO_Pin_6|GPIO_Pin_10);
+	}
+	else if(sbus[5]<1500&&sbus[5]>500)
+	{
+		GPIO_ResetBits(GPIOA,GPIO_Pin_6|GPIO_Pin_8|GPIO_Pin_9|GPIO_Pin_10);
+	}
+	else if(sbus[5]<500)
+	{
+		GPIO_SetBits(GPIOA,GPIO_Pin_8|GPIO_Pin_9);
+	}
+}
+//记录经纬度
+  if (Variable_detection(sbus_Value[6],sbus[6]))
+   {	
+		 if(sbus[6]>1500)
+			 {
+	     uart4_send(0x01);
+				 }
+			 
+   }
+
+ 	
+
+}
+
+void Ros_control()
+{
+	//if();
+	
+}
+
+//变量检测函数
+u8 Variable_detection(u16 *Old_Value,u16 New_Value)
+{
+	  u16 old_value = *Old_Value; // 从指针获取值  
+    if (New_Value == old_value) {  
+        return 0; // 如果值相同，返回false  
+    } else {  
+        *Old_Value = New_Value; // 更新值  
+        return 1; // 如果值不同，返回true  
+    }  
+}
+
+
+void Gpio_Init(void)
+{
+  GPIO_InitTypeDef  GPIO_InitStructure;	
+  RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);//使能GPIOA时钟
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOF, ENABLE);//使能GPIOB时钟
+	
+  GPIO_InitStructure.GPIO_Pin =  GPIO_Pin_6|GPIO_Pin_8|GPIO_Pin_9|GPIO_Pin_10;//LED对应IO口
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;//普通输出模式
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;//推挽输出
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;//100MHz
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;//上拉
+  GPIO_Init(GPIOA, &GPIO_InitStructure);//初始化GPIO
+	GPIO_Init(GPIOF, &GPIO_InitStructure);//初始化GPIO
+	GPIO_ResetBits(GPIOA,GPIO_Pin_6|GPIO_Pin_8|GPIO_Pin_9|GPIO_Pin_10);
+	GPIO_ResetBits(GPIOF,GPIO_Pin_8);
+}
+

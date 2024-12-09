@@ -1,0 +1,20 @@
+#ifndef __CONTROL_H
+#define __CONTROL_H			  	 
+#include "sys.h"
+#include "system.h"
+
+#define CONTROL_TASK_PRIO		4     //任务优先级
+#define CONTROL_STK_SIZE 		512   //任务堆栈大小
+
+typedef struct {  
+    int value;  
+    void (*functions)(int Value); // 变量变化时调用的函数 
+}Variable;  
+
+void Control_task(void *pvParameters);
+void Remote_control(void);
+void Ros_control(void);
+u8 Variable_detection(u16 *Old_Value,u16 New_Value);
+void Gpio_Init(void);
+#endif  
+

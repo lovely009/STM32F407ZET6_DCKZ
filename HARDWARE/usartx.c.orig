@@ -1,0 +1,437 @@
+#include "usartx.h"
+#include "system.h"
+
+volatile u8 UART4_Flag=0;
+
+SEND_DATA Send_Data;
+
+RECEIVE_DATA Receive_Data;
+
+extern int Time_count;
+/**************************************************************************
+函数功能：串口，CAN发送数据任务
+入口参数：无
+返回  值：无
+**************************************************************************/
+void data_task(void *pvParameters)
+{
+	 u32 lastWakeTime = getSysTickCnt();
+	
+   while(1)
+    {	
+			//此任务以20Hz的频率运行(50ms)
+			vTaskDelayUntil(&lastWakeTime, F2T(RATE_20_HZ));
+			//对要进行发送的数据进行赋值
+			data_transition(); 
+			//开启串口发送数据
+//			USART3_SEND();      //串口3（485）发送数据
+//			UART4_SEND();       //串口4（USB）发送数据
+			CAN_SEND();         //CAN发送数据		
+		}
+}
+/**************************************************************************
+函数功能：串口发送的数据进行赋值
+入口参数：无
+返回  值：无
+**************************************************************************/
+void data_transition(void)
+{	
+	//can通信	  
+	Send_Data.buffer[0]=0x2B;
+	Send_Data.buffer[1]=0x00;
+	Send_Data.buffer[2]=0x00;
+	Send_Data.buffer[3]=0x00;
+	Send_Data.buffer[4]=Send_Data.Send_Str.A_speed;
+	Send_Data.buffer[5]=Send_Data.Send_Str.B_speed;
+	Send_Data.buffer[6]=0x00;
+	Send_Data.buffer[7]=0x00;
+	
+	//485通信
+	Send_Data.buffer[8] =0x48;
+	Send_Data.buffer[9] =0x3a;
+	Send_Data.buffer[10]=0x01;
+	Send_Data.buffer[11]=0x70;
+	Send_Data.buffer[12]=Send_Data.Send_Str.R_number;
+	Send_Data.buffer[13]=Send_Data.Send_Str.R_status;
+	Send_Data.buffer[14]=0x00;
+	Send_Data.buffer[15]=0x00;
+	
+}
+/**************************************************************************
+函数功能：串口1发送数据
+入口参数：无
+返回  值：无
+**************************************************************************/
+void USART1_SEND(void)
+{
+		
+}
+/**************************************************************************
+函数功能：串口2发送数据
+入口参数：无
+返回  值：无
+**************************************************************************/
+void USART2_SEND(void)
+{
+		
+}
+/**************************************************************************
+函数功能：串口3发送数据
+入口参数：无
+返回  值：无
+**************************************************************************/
+void USART3_SEND(void)
+{
+	u8 i;
+	for(i=0;i<8;i++)
+	{	
+	usart3_send(Send_Data.buffer[i+8]);
+	}	
+}
+/**************************************************************************
+函数功能：串口4发送数据
+入口参数：无
+返回  值：无
+**************************************************************************/
+void UART4_SEND(void)
+{ 	
+	if(UART4_Flag==1)
+	{
+    switch(Receive_Data.buffer[1])
+				 {
+					 case 0x10:printf("已执行:前进     <执行代码:%x>\r\n",0x10);  break;//前进
+					 case 0x11:printf("已执行:后退     <执行代码:%x>\r\n",0x11);  break;//后退
+					 case 0x12:printf("已执行:左旋     <执行代码:%x>\r\n",0x12);  break;//左旋
+					 case 0x13:printf("已执行:右旋     <执行代码:%x>\r\n",0x13);  break;//右旋				 
+					 case 0x14:printf("已执行:刹车     <执行代码:%x>\r\n",0x14);  break;//刹车
+					 case 0x15:printf("已执行:前臂升   <执行代码:%x>\r\n",0x15);  break;//前臂升
+					 case 0x16:printf("已执行:前臂降   <执行代码:%x>\r\n",0x16);  break;//前臂降
+					 case 0x17:printf("已执行:前臂停止 <执行代码:%x>\r\n",0x17);  break;//前臂停止
+					 case 0x18:printf("已执行:后臂升   <执行代码:%x>\r\n",0x18);  break;//后臂升
+           case 0x19:printf("已执行:后臂降   <执行代码:%x>\r\n",0x19);  break;//后臂降
+					 case 0x20:printf("已执行:后臂停止 <执行代码:%x>\r\n",0x20);  break;//后臂停止
+           default  :printf("已执行:停止     <执行代码:%x>\r\n",0xFF);  break;//停止		 
+				 }				 
+	}
+	
+	else if(UART4_Flag==2)
+	{
+		printf("A轮速度为%d\r\n",Receive_Data.buffer[1]);
+		printf("B轮速度为%d\r\n",Receive_Data.buffer[1]);	
+	}
+}
+/**************************************************************************
+函数功能：CAN发送数据
+入口参数：无
+返 回 值：无
+**************************************************************************/
+void CAN_SEND(void) 
+{
+	u8 CAN_SENT[8],i;
+		
+	for(i=0;i<8;i++)
+	{
+  CAN_SENT[i]=Send_Data.buffer[i];
+	}
+	
+	CAN1_Send_Num(0x601,CAN_SENT);
+	
+}
+/**************************************************************************
+函数功能：串口1初始化
+入口参数：无
+返 回 值：无
+**************************************************************************/
+void usart1_init(u32 bound)
+{  	 
+	GPIO_InitTypeDef GPIO_InitStructure;
+	USART_InitTypeDef USART_InitStructure;
+	NVIC_InitTypeDef NVIC_InitStructure;
+	
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);	 //使能GPIO时钟
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE); //使能USART时钟
+
+	GPIO_PinAFConfig(GPIOA,GPIO_PinSource9,GPIO_AF_USART1);	
+	GPIO_PinAFConfig(GPIOA,GPIO_PinSource10 ,GPIO_AF_USART1);	 
+	
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9|GPIO_Pin_10;
+	GPIO_InitStructure.GPIO_Mode=GPIO_Mode_AF;            //输出模式
+	GPIO_InitStructure.GPIO_OType=GPIO_OType_PP;          //推挽输出
+	GPIO_InitStructure.GPIO_Speed=GPIO_Speed_50MHz;       //高速50MHZ
+	GPIO_InitStructure.GPIO_PuPd=GPIO_PuPd_UP;            //上拉
+	GPIO_Init(GPIOA, &GPIO_InitStructure);  		          //初始化
+	
+  //UsartNVIC配置
+	NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
+	//抢占优先级
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=4 ;
+	//子优先级
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;		
+	//IRQ通道使能
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;	
+	//根据指定的参数初始化VIC寄存器	
+	NVIC_Init(&NVIC_InitStructure);	
+	
+  //初始化设置
+	USART_InitStructure.USART_BaudRate = bound; //串口波特率
+	USART_InitStructure.USART_WordLength = USART_WordLength_8b; //字长为8位数据格式
+	USART_InitStructure.USART_StopBits = USART_StopBits_1; //一个停止位
+	USART_InitStructure.USART_Parity = USART_Parity_No; //无奇偶校验位
+	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None; //无硬件数据流控制
+	USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;	//收发模式
+	USART_Init(USART1, &USART_InitStructure); //初始化串口1
+	
+	USART_ITConfig(USART1, USART_IT_RXNE, ENABLE); //开启串口接受中断
+	USART_Cmd(USART1, ENABLE);                     //使能串口1
+}
+/**************************************************************************
+函数功能：串口2初始化
+入口参数：无
+返 回 值：无
+**************************************************************************/
+void usart2_init(u32 bound)
+{  	 
+	GPIO_InitTypeDef GPIO_InitStructure;
+	USART_InitTypeDef USART_InitStructure;
+	NVIC_InitTypeDef NVIC_InitStructure;
+	
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);	 //使能GPIO时钟
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE); //使能USART时钟
+
+	GPIO_PinAFConfig(GPIOA,GPIO_PinSource9,GPIO_AF_USART1);	
+	GPIO_PinAFConfig(GPIOA,GPIO_PinSource10 ,GPIO_AF_USART1);	 
+	
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9|GPIO_Pin_10;
+	GPIO_InitStructure.GPIO_Mode=GPIO_Mode_AF;            //输出模式
+	GPIO_InitStructure.GPIO_OType=GPIO_OType_PP;          //推挽输出
+	GPIO_InitStructure.GPIO_Speed=GPIO_Speed_50MHz;       //高速50MHZ
+	GPIO_InitStructure.GPIO_PuPd=GPIO_PuPd_UP;            //上拉
+	GPIO_Init(GPIOA, &GPIO_InitStructure);  		          //初始化
+	
+  //UsartNVIC配置
+	NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
+	//抢占优先级
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=4 ;
+	//子优先级
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;		
+	//IRQ通道使能
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;	
+	//根据指定的参数初始化VIC寄存器	
+	NVIC_Init(&NVIC_InitStructure);	
+	
+  //初始化设置
+	USART_InitStructure.USART_BaudRate = bound; //串口波特率
+	USART_InitStructure.USART_WordLength = USART_WordLength_8b; //字长为8位数据格式
+	USART_InitStructure.USART_StopBits = USART_StopBits_1; //一个停止位
+	USART_InitStructure.USART_Parity = USART_Parity_No; //无奇偶校验位
+	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None; //无硬件数据流控制
+	USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;	//收发模式
+	USART_Init(USART1, &USART_InitStructure); //初始化串口1
+	
+	USART_ITConfig(USART1, USART_IT_RXNE, ENABLE); //开启串口接受中断
+	USART_Cmd(USART1, ENABLE);                     //使能串口1
+}
+/**************************************************************************
+函数功能：串口3初始化
+入口参数：无
+返回  值：无
+**************************************************************************/
+void usart3_init(u32 bound)
+{  	 
+  GPIO_InitTypeDef GPIO_InitStructure;
+	USART_InitTypeDef USART_InitStructure;
+	NVIC_InitTypeDef NVIC_InitStructure;
+	
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);	 //Enable the gpio clock  //使能GPIO时钟
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE); //Enable the Usart clock //使能USART时钟
+	
+	GPIO_PinAFConfig(GPIOB,GPIO_PinSource10,GPIO_AF_USART3);	
+	GPIO_PinAFConfig(GPIOB,GPIO_PinSource11,GPIO_AF_USART3);	 
+	
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10|GPIO_Pin_11;
+	GPIO_InitStructure.GPIO_Mode=GPIO_Mode_AF;            //输出模式
+	GPIO_InitStructure.GPIO_OType=GPIO_OType_PP;          //推挽输出
+	GPIO_InitStructure.GPIO_Speed=GPIO_Speed_50MHz;       //高速50MHZ
+	GPIO_InitStructure.GPIO_PuPd=GPIO_PuPd_UP;            //上拉
+	GPIO_Init(GPIOB, &GPIO_InitStructure);  		          //初始化
+	
+  //UsartNVIC配置
+  NVIC_InitStructure.NVIC_IRQChannel = USART3_IRQn;
+	//抢占优先级
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=3 ;
+	//抢占优先级
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;		
+	//IRQ通道使能	
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;	
+	//根据指定的参数初始化VIC寄存器		
+	NVIC_Init(&NVIC_InitStructure);
+	
+  //初始化设置
+	USART_InitStructure.USART_BaudRate = bound; //串口波特率
+	USART_InitStructure.USART_WordLength = USART_WordLength_8b; //字长为8位数据格式
+	USART_InitStructure.USART_StopBits = USART_StopBits_1; //一个停止
+	USART_InitStructure.USART_Parity = USART_Parity_No; //无奇偶校验位
+	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None; //无硬件数据流控制
+	USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;	//收发模式
+  USART_Init(USART3, &USART_InitStructure);      //初始化串口3
+	
+  USART_ITConfig(USART3, USART_IT_RXNE, ENABLE); //开启串口接受中断
+  USART_Cmd(USART3, ENABLE);                     //使能串口3 
+}
+/**************************************************************************
+函数功能：串口4初始化
+入口参数：无
+返回  值：无
+**************************************************************************/
+void uart4_init(u32 bound)
+{  	 
+	GPIO_InitTypeDef GPIO_InitStructure;
+	USART_InitTypeDef USART_InitStructure;
+	NVIC_InitTypeDef NVIC_InitStructure;
+
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOC, ENABLE);	 //使能GPIO时钟
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_UART4, ENABLE); //使能USART时钟
+	
+	GPIO_PinAFConfig(GPIOC,GPIO_PinSource10,GPIO_AF_UART4);	
+	GPIO_PinAFConfig(GPIOC,GPIO_PinSource11,GPIO_AF_UART4);	 
+	
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10|GPIO_Pin_11;
+	GPIO_InitStructure.GPIO_Mode=GPIO_Mode_AF;            //输出模式
+	GPIO_InitStructure.GPIO_OType=GPIO_OType_PP;          //推挽输出
+	GPIO_InitStructure.GPIO_Speed=GPIO_Speed_50MHz;       //高速50MHZ
+	GPIO_InitStructure.GPIO_PuPd=GPIO_PuPd_UP;            //上拉
+	GPIO_Init(GPIOC, &GPIO_InitStructure);  		          //初始化
+	
+	//UsartNVIC配置
+	NVIC_InitStructure.NVIC_IRQChannel = UART4_IRQn;
+	//抢占优先级
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority=2 ;
+	//子优先级
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;	
+  //IRQ通道使能	
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+	//根据指定的参数初始化VIC寄存器		
+	NVIC_Init(&NVIC_InitStructure);	
+	
+	//初始化设置
+	USART_InitStructure.USART_BaudRate = bound; //串口波特率
+	USART_InitStructure.USART_WordLength = USART_WordLength_8b; //字长为8位数据格式
+	USART_InitStructure.USART_StopBits = USART_StopBits_1;  //一个停止
+	USART_InitStructure.USART_Parity = USART_Parity_No; //无奇偶校验位
+	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None; //无硬件数据流控制
+	USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;	//收发模式
+	USART_Init(UART4, &USART_InitStructure);      //初始化串口2
+	
+	USART_ITConfig(UART4, USART_IT_RXNE, ENABLE);  //开启串口接受中断
+	USART_Cmd(UART4, ENABLE);                      //使能串口2 
+}
+
+/**************************************************************************
+Function: Serial port 1 receives interrupted
+Input   : none
+Output  : none
+函数功能：串口1接收中断
+入口参数：无
+返 回 值：无
+**************************************************************************/
+int USART1_IRQHandler(void)
+{	
+	return 0;
+}
+/**************************************************************************
+函数功能：串口2接收中断
+入口参数：无
+返回  值：无
+**************************************************************************/
+int USART2_IRQHandler(void)
+{	
+	return 0;
+}
+/**************************************************************************
+函数功能：串口3接收中断
+入口参数：无
+返回  值：无
+**************************************************************************/
+int USART3_IRQHandler(void)
+{	
+	return 0;
+}
+/**************************************************************************
+函数功能：串口4接收中断
+入口参数：无
+返回  值：无
+**************************************************************************/
+int UART4_IRQHandler(void)
+{
+	static u8 Count=0;
+	u8 Usart_Receive=0;
+	
+	if(USART_GetITStatus(UART4, USART_IT_RXNE) != RESET) //判断是否接收到数据
+	{
+	 Usart_Receive=USART_ReceiveData(UART4); //读取数据
+	 Receive_Data.buffer[Count]=Usart_Receive;	
+	  if(Usart_Receive == FRAME_HEADER||Count>0)//确保数组第一个数据为帧头
+		 {			
+      if(Receive_Data.buffer[Count] == FRAME_TAIL)
+		   {
+			  if (Count == 2)      //验证数据包的长度
+			   {
+		       UART4_Flag=1;
+		       Count=0;          //为串口数据重新填入数组做准备
+			   }			
+		    else if (Count == 3) //验证数据包的长度	
+		     {				
+			     UART4_Flag=2;
+				   Count=0;          //为串口数据重新填入数组做准备	
+			   }
+				else Count=0;
+		   }
+      else Count++;	
+	   }
+	  else return 0;  
+  }
+ return 0;
+}
+
+/**************************************************************************
+函数功能：串口1发送数据
+入口参数：要发送的数据
+返回  值：无
+**************************************************************************/
+void usart1_send(u8 data)
+{
+	USART1->DR = data;
+	while((USART1->SR&0x40)==0);	
+}
+/**************************************************************************
+函数功能：串口2发送数据
+入口参数：要发送的数据
+返回  值：无
+**************************************************************************/
+void usart2_send(u8 data)
+{
+	USART2->DR = data;
+	while((USART2->SR&0x40)==0);	
+}
+/**************************************************************************
+函数功能：串口3发送数据
+入口参数：要发送的数据
+返回  值：无
+**************************************************************************/
+void usart3_send(u8 data)
+{
+	USART3->DR = data;
+	while((USART3->SR&0x40)==0);	
+}
+/**************************************************************************
+函数功能：串口4发送数据
+入口参数：要发送的数据
+返回  值：无
+**************************************************************************/
+void uart4_send(u8 data)
+{
+	UART4->DR = data;
+	while((UART4->SR&0x40)==0);	
+}
+
+
